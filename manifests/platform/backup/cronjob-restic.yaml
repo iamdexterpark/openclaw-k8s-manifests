@@ -1,0 +1,106 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: state-backup
+  namespace: platform
+  labels:
+    app.kubernetes.io/name: state-backup
+spec:
+  schedule: "0 * * * *"            # hourly snapshot of high-churn agent state
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        spec:
+          restartPolicy: Never
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 10001
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: restic
+              image: registry.example.internal/restic@sha256:1111111111111111111111111111111111111111111111111111111111111111
+              command: ["/bin/sh", "-c"]
+              args:
+                - |
+                  set -euo pipefail
+                  # State is already in object storage (ADR-0003); this job snapshots it
+                  # into a CLIENT-ENCRYPTED restic repo for point-in-time + retention
+                  # (ADR-0004). The bucket only ever holds ciphertext.
+                  restic snapshots >/dev/null 2>&1 || restic init
+                  restic backup "$STATE_MIRROR" --tag fleet-state
+                  restic forget --keep-hourly 24 --keep-daily 7 --keep-weekly 4 --prune
+              env:
+                - name: RESTIC_REPOSITORY
+                  value: "gs:edge-agent-state:/restic"
+                - name: STATE_MIRROR
+                  value: "/state"
+                - name: RESTIC_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: backup-secrets
+                      key: restic_password
+              envFrom:
+                - secretRef:
+                    name: backup-secrets   # object-store creds (materialized by ESO)
+              volumeMounts:
+                - name: state
+                  mountPath: /state
+                  readOnly: true
+          volumes:
+            # Read-only mirror of the agents' object-store state, synced in by an
+            # init/sidecar in a full deployment; shown as a mount point here.
+            - name: state
+              emptyDir: {}
+---
+# A weekly restore DRILL — a backup nobody has ever restored is not a backup (ADR-0004 D5).
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: restore-drill
+  namespace: platform
+  labels:
+    app.kubernetes.io/name: restore-drill
+spec:
+  schedule: "0 17 * * 0"          # weekly
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      template:
+        spec:
+          restartPolicy: Never
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 10001
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: drill
+              image: registry.example.internal/restic@sha256:1111111111111111111111111111111111111111111111111111111111111111
+              command: ["/bin/sh", "-c"]
+              args:
+                - |
+                  set -euo pipefail
+                  restic check                          # repo integrity
+                  restic restore latest --target /tmp/restore --tag fleet-state
+                  test -d /tmp/restore && echo "restore-drill: OK"
+                  # A full drill also smoke-tests a throwaway agent against the
+                  # restored corpus — integrity alone proves nothing (ADR-0004 D5).
+              env:
+                - name: RESTIC_REPOSITORY
+                  value: "gs:edge-agent-state:/restic"
+                - name: RESTIC_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: backup-secrets
+                      key: restic_password
+              envFrom:
+                - secretRef:
+                    name: backup-secrets

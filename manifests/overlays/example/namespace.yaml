@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: example
+  labels:
+    app.kubernetes.io/part-of: agent-fleet
+    # Namespace-per-agent: blast-radius isolation + a one-command decommission
+    # (`kubectl delete ns example`).

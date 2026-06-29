@@ -1,0 +1,30 @@
+# Secrets — never commit actual secret MATERIAL.
+# LESSON: scope to value-bearing files, NOT resource definitions or docs that merely
+# contain the word "secret" (e.g. k8s ExternalSecret / ClusterSecretStore manifests).
+# A broad `*secret*` glob will silently swallow legit resource defs.
+*.env
+.env
+*.key
+*.pem
+*.plain.yaml
+secrets.plain.*
+secrets.dec.*
+age-key.txt
+auth-profiles.json
+
+# Terraform (if applicable)
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+crash.log
+
+# Local / OS
+.DS_Store
+*.swp
+*~
+
+# Rendered diagram exports (sources stay in markdown)
+# docs/diagrams/*.png
+# docs/diagrams/*.svg

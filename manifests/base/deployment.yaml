@@ -1,0 +1,116 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: workload
+  labels:
+    app.kubernetes.io/name: workload
+spec:
+  replicas: 1            # single-writer primitive: exactly one active writer (ADR-0001)
+  strategy:
+    type: Recreate       # old pod fully terminates before the new one starts — never two writers
+  selector:
+    matchLabels: { app: workload }
+  template:
+    metadata:
+      labels: { app: workload }
+    spec:
+      serviceAccountName: workload      # bound to a cloud identity in the overlay (Workload Identity)
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      # ---------------------------------------------------------------------
+      # STATE DURABILITY — the load-bearing reality (ADR-0003).
+      #
+      # The runtime persists its workspace + memory to a FILESYSTEM PATH
+      # (OPENCLAW_STATE_DIR=/work, workspaceRoot=/work/workspace, etc.). There
+      # is NO built-in object-store backend that reads STATE_PREFIX on its own —
+      # so an emptyDir alone would silently EVAPORATE all agent memory on every
+      # pod restart (and Recreate guarantees a restart on any change). The
+      # object-store model only works if something actually moves bytes:
+      #   - init-container HYDRATES /work from the object-store prefix on start;
+      #   - a sidecar SYNCS /work back to the prefix on change.
+      # The runtime sees a normal local dir; the sync makes it durable.
+      # ---------------------------------------------------------------------
+      initContainers:
+        - name: state-hydrate
+          image: state-sync             # kustomize images: pins this (e.g. an rclone/gcloud image) @sha256
+          args: ["hydrate"]             # pull <object-store>/<STATE_PREFIX>/ -> /work (no-op on first ever boot)
+          env:
+            - name: STATE_PREFIX
+              valueFrom:
+                configMapKeyRef: { name: agent-config, key: state_prefix }
+          volumeMounts:
+            - name: scratch
+              mountPath: /work
+      containers:
+        - name: workload
+          image: workload               # transformed by kustomize images: (overlay pins @sha256)
+          imagePullPolicy: IfNotPresent
+          args: ["gateway", "start", "--config", "/config/openclaw.json"]
+          ports:
+            - name: http
+              containerPort: 18789
+          env:
+            # Config immutability — the runtime refuses in-pod mutation (ADR-0006).
+            - name: OPENCLAW_NIX_MODE
+              value: "1"
+            # The runtime persists to this FILESYSTEM path. It MUST be the synced
+            # mount (/work) — that is what the hydrate init + syncback sidecar move
+            # to/from the object store. There is no env-driven object-store backend;
+            # durability is the sync, not this variable (ADR-0003).
+            - name: OPENCLAW_STATE_DIR
+              value: "/work"
+            # Last-mile secrets, materialized by ESO (ADR-0002).
+            - name: GATEWAY_AUTH_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: agent-secrets
+                  key: gateway_auth_password
+          envFrom:
+            - secretRef:
+                name: agent-secrets       # model key + any bound channel tokens (opaque)
+          volumeMounts:
+            - name: config
+              mountPath: /config
+              readOnly: true              # config is immutable to the running pod (ADR-0006)
+            - name: scratch
+              mountPath: /work            # the runtime's live state dir; durability comes from the sync sidecar, not the volume
+          startupProbe:
+            httpGet: { path: /healthz, port: http }
+            failureThreshold: 30
+            periodSeconds: 5              # tolerate a slow first boot
+          readinessProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 30
+          resources:
+            requests: { cpu: "250m", memory: "512Mi" }
+            limits:   { cpu: "2",    memory: "2Gi" }     # fits a small ARM edge node
+        # Syncback sidecar: pushes /work -> object-store so state survives pod death.
+        # Pair with a preStop flush on the main container for a clean last write.
+        - name: state-syncback
+          image: state-sync               # same image as the hydrate init; kustomize pins @sha256
+          args: ["syncback", "--interval=60s"]   # periodic push of /work -> <object-store>/<STATE_PREFIX>/
+          env:
+            - name: STATE_PREFIX
+              valueFrom:
+                configMapKeyRef: { name: agent-config, key: state_prefix }
+          volumeMounts:
+            - name: scratch
+              mountPath: /work
+              readOnly: true              # sidecar only READS the live dir to push it up
+          resources:
+            requests: { cpu: "25m",  memory: "32Mi" }
+            limits:   { cpu: "250m", memory: "128Mi" }
+      volumes:
+        - name: config
+          projected:
+            sources:
+              - configMap: { name: agent-config }
+        - name: scratch
+          emptyDir: {}

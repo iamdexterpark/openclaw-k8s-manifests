@@ -1,0 +1,31 @@
+%% ARCHITECTURE AT A GLANCE — the deeper view (the hook lives in hero.mermaid).
+%% The transformation: one process pretending to be a fleet → a real fleet of
+%% stateless, single-writer pods with externalized state and secrets. AGNOSTIC.
+flowchart LR
+    subgraph Before ["Upstream shape — one process"]
+        P["single runtime process<br/>· all agents in-process<br/>· host filesystem = the database<br/>· OS keychain = the secret store<br/>· one box, no failover"]
+    end
+
+    subgraph After ["Fleet shape — this repo"]
+        direction TB
+        A1["pod: agent-a<br/>1 gateway · 1 agent · single writer"]
+        A2["pod: agent-b<br/>1 gateway · 1 agent · single writer"]
+        STATE["versioned object store<br/>(externalized state)"]
+        SEC["external secret authority<br/>(no on-box keychain)"]
+        REC["GitOps reconciler<br/>(config-as-code in)"]
+        REC --> A1
+        REC --> A2
+        A1 -.-> STATE
+        A2 -.-> STATE
+        SEC -.-> A1
+        SEC -.-> A2
+    end
+
+    Before ==>|"containerize · decouple state · declare config · externalize secrets"| After
+
+    style P fill:#c0392b,color:#fff,stroke:#7f1d1d
+    style A1 fill:#27ae60,color:#fff,stroke:#1e8449
+    style A2 fill:#27ae60,color:#fff,stroke:#1e8449
+    style STATE fill:#16a085,color:#fff,stroke:#0e6655
+    style SEC fill:#8e44ad,color:#fff,stroke:#713f8f
+    style REC fill:#2980b9,color:#fff,stroke:#1f6fa5

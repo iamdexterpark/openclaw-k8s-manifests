@@ -1,0 +1,19 @@
+%% LIFECYCLE — provision → deploy → operate → maintain → decommission.
+%% Each transition maps to a numbered runbook; every transition is a pipeline,
+%% not a tribal-knowledge checklist.
+stateDiagram-v2
+    [*] --> Designed: repo + persona drafted
+    Designed --> Provisioned: image build (RB 01) + cluster + platform (RB 02–03)
+    Provisioned --> Active: secrets (RB 04) + deploy overlay (RB 06)
+    Active --> Active: push-to-deploy / rollback (RB 05)
+    Active --> Recovering: failure → restore from snapshot (RB 08)
+    Recovering --> Active: readiness green + smoke test
+    Active --> Decommissioned: final archive + teardown + cloud TTL (RB 07)
+    Decommissioned --> [*]
+
+    note right of Active
+      Steady state lives here.
+      Scale the fleet by adding
+      an overlay, not a replica.
+      Watch spend as a first-class signal.
+    end note

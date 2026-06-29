@@ -1,0 +1,36 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Onboarding one agent == one overlay. Set the namespace, the name, the image digest,
+# bind Workload Identity, and patch the agent's identity + secret paths. Everything else
+# comes from base.
+namespace: example
+namePrefix: example-
+
+resources:
+  - ../../base
+  - namespace.yaml
+
+# Overlay owns the production pin: real registry + immutable @sha256 digest (never a
+# moving tag — PLAYBOOK §7).
+images:
+  - name: workload
+    newName: registry.example.internal/openclaw-runtime
+    digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
+  - name: state-sync
+    newName: registry.example.internal/state-sync
+    digest: sha256:1111111111111111111111111111111111111111111111111111111111111111
+
+patches:
+  - path: patch-serviceaccount.yaml
+    target:
+      kind: ServiceAccount
+      name: workload
+  - path: patch-config.yaml
+    target:
+      kind: ConfigMap
+      name: agent-config
+  - path: patch-externalsecret.yaml
+    target:
+      kind: ExternalSecret
+      name: agent-secrets

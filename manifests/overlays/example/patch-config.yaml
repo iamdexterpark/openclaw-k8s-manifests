@@ -1,0 +1,31 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: agent-config
+data:
+  state_prefix: "object-store://edge-agent-state/agents/example/"
+  openclaw.json: |
+    {
+      "gateway": { "mode": "local", "bind": "loopback", "port": 18789 },
+      "session": { "dmScope": "per-channel-peer" },
+      "agents": {
+        "list": [
+          {
+            "id": "example",
+            "displayName": "Example Agent",
+            "runtime": { "type": "native" },
+            "workspaceRoot": "/work/workspace",
+            "personaFiles": [
+              "persona/AGENTS.md", "persona/SOUL.md", "persona/IDENTITY.md",
+              "persona/USER.md", "persona/TOOLS.md", "persona/MEMORY.md"
+            ],
+            "memoryRoot": "/work/workspace/memory",
+            "defaultModel": "provider/model-placeholder",
+            "heartbeat": { "enabled": false }
+          }
+        ]
+      },
+      "channels": {
+        "webchat": { "bindings": [ { "agent": "example" } ] }
+      }
+    }

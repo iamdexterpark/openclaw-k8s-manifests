@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: workload
+  labels:
+    app.kubernetes.io/name: workload
+spec:
+  type: ClusterIP
+  selector:
+    app: workload
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+# Fronted by a mesh operator that exposes a per-agent PRIVATE hostname on the overlay
+# (e.g. agent-<id>.mesh.example.internal). No agent is published to the public internet
+# (ADR-0005). Inbound channel events arrive by Pub/Sub pull (egress-only) — the edge
+# network opens no inbound port. A dedicated webhook ingress is used only for a channel
+# that cannot be polled.

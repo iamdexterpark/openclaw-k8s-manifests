@@ -1,0 +1,15 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+# Cluster-wide platform primitives: the ESO secret store (KMS-backed via Workload
+# Identity) and the backup/restore-drill CronJobs. Applied once per cluster, before
+# any agent overlay.
+resources:
+  - namespace.yaml
+  - external-secrets/clustersecretstore.yaml
+  - backup/cronjob-restic.yaml
+
+labels:
+  - includeSelectors: false
+    pairs:
+      app.kubernetes.io/part-of: agent-fleet
+      app.kubernetes.io/managed-by: kustomize

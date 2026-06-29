@@ -1,0 +1,36 @@
+%% HERO — top of README, directly under the thesis.
+%% The whole story in one picture: a single-process runtime becomes a fleet of
+%% stateless pods, with config, secrets, and state each handed to the primitive
+%% that is actually good at it.
+flowchart LR
+    OP["Operator<br/>(laptop / phone)"]
+
+    subgraph SOT ["Source of truth (Git)"]
+        GIT["config · persona · overlays<br/>as code"]
+    end
+
+    subgraph Fleet ["Kubernetes fleet — one agent per pod"]
+        direction TB
+        A1["pod: agent-a<br/>1 gateway · 1 agent"]
+        A2["pod: agent-b<br/>1 gateway · 1 agent"]
+        A3["pod: agent-c<br/>1 gateway · 1 agent"]
+    end
+
+    subgraph Cloud ["Externalized primitives (cloud)"]
+        direction TB
+        STATE["versioned object storage<br/>(workspace · memory · transcripts)"]
+        SEC["secret manager<br/>(materialized in-cluster)"]
+    end
+
+    OP -->|"declares intent · push-to-apply"| GIT
+    GIT -->|"reconciled"| Fleet
+    SEC -.->|"least-privilege<br/>materialization"| Fleet
+    Fleet -.->|"state R/W · pods own nothing durable"| STATE
+
+    style OP fill:#2980b9,color:#fff,stroke:#1f6fa5
+    style GIT fill:#2c3e50,color:#fff,stroke:#1a252f
+    style A1 fill:#27ae60,color:#fff,stroke:#1e8449
+    style A2 fill:#27ae60,color:#fff,stroke:#1e8449
+    style A3 fill:#27ae60,color:#fff,stroke:#1e8449
+    style STATE fill:#16a085,color:#fff,stroke:#0e6655
+    style SEC fill:#8e44ad,color:#fff,stroke:#713f8f

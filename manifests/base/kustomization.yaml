@@ -1,0 +1,29 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Base = one reusable agent primitive. Overlays set identity, namespace, channel
+# binding, and the production image pin.
+#
+# Leave the image as a BARE NAME here; the overlay owns newName + the @sha256 digest
+# (PLAYBOOK §7 — a base rename can silently drop the overlay digest). A non-prod
+# newTag keeps the base render-able standalone.
+resources:
+  - serviceaccount.yaml
+  - deployment.yaml
+  - service.yaml
+  - configmap.yaml
+  - externalsecret.yaml
+  - networkpolicy.yaml
+  - pdb.yaml
+
+labels:
+  - includeSelectors: false
+    pairs:
+      app.kubernetes.io/part-of: agent-fleet
+      app.kubernetes.io/managed-by: kustomize
+
+images:
+  - name: workload
+    newTag: dev   # overlays override with newName + @sha256 digest
+  - name: state-sync   # hydrate-init + syncback-sidecar (rclone/gcloud-class); overlay pins @sha256
+    newTag: dev

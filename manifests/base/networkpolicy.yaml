@@ -1,0 +1,42 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: agent-default-deny
+  labels:
+    app.kubernetes.io/name: workload
+spec:
+  podSelector:
+    matchLabels:
+      app: workload
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Only the ingress/mesh namespace may reach the agent's HTTP port.
+    - from:
+        - namespaceSelector:
+            matchLabels: { role: ingress }
+      ports:
+        - protocol: TCP
+          port: 18789
+  egress:
+    # DNS.
+    - to:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels: { k8s-app: kube-dns }
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # Secure egress for model APIs, GCS, Secret Manager, Pub/Sub, channel APIs.
+    # Tightened to specific CIDRs / an egress gateway in a hardened overlay.
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 169.254.0.0/16   # no link-local / cloud metadata endpoints
+      ports:
+        - protocol: TCP
+          port: 443

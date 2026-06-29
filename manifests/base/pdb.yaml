@@ -1,0 +1,14 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: workload
+  labels:
+    app.kubernetes.io/name: workload
+spec:
+  # One writer per agent: keep voluntary disruptions (node drains) from taking the
+  # agent down without a deliberate reschedule. Part of the single-writer composition
+  # (ADR-0001) — not a substitute for replicas:1 + Recreate.
+  maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: workload

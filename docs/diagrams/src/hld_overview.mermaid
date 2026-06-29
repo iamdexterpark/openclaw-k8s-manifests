@@ -1,0 +1,38 @@
+%% HLD OVERVIEW — top of HLD. AGNOSTIC: role-generic labels only, NO products.
+%% Three keystone primitives and how they relate: the single-writer workload,
+%% config-as-code reconciled in, and durable state externalized out.
+flowchart TB
+    subgraph Control ["Control plane (primitives)"]
+        SRC["config-as-code<br/>(source of truth)"]
+        REC["reconciler<br/>(declarative apply)"]
+        SRC -->|"push-to-apply"| REC
+    end
+
+    subgraph DataPlane ["Data plane (primitives)"]
+        direction TB
+        WORK["single-writer workload<br/>(one active writer per agent)"]
+        SEC["secret materialization<br/>(least privilege, runtime)"]
+        SCRATCH["transient scratch<br/>(owns nothing durable)"]
+        WORK --- SCRATCH
+    end
+
+    subgraph External ["Externalized durable primitives"]
+        STATE["versioned object store<br/>(the retrieval corpus)"]
+        SMGR["external secret authority"]
+        BKP["client-encrypted snapshots<br/>(verified restore)"]
+    end
+
+    REC -->|"reconciles"| WORK
+    SMGR -.->|"materialize"| SEC
+    SEC -.-> WORK
+    WORK -.->|"R/W"| STATE
+    STATE -->|"snapshot"| BKP
+
+    style SRC fill:#2c3e50,color:#fff,stroke:#1a252f
+    style REC fill:#2980b9,color:#fff,stroke:#1f6fa5
+    style WORK fill:#8e44ad,color:#fff,stroke:#713f8f
+    style SEC fill:#7f8c8d,color:#fff,stroke:#606a6b
+    style SCRATCH fill:#95a5a6,color:#fff,stroke:#707b7c
+    style STATE fill:#16a085,color:#fff,stroke:#0e6655
+    style SMGR fill:#7f8c8d,color:#fff,stroke:#606a6b
+    style BKP fill:#e67e22,color:#fff,stroke:#ca6510

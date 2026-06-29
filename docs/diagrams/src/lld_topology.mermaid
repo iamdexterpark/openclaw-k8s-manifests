@@ -1,0 +1,57 @@
+%% LLD TOPOLOGY — top of LLD. SPECIFIC: named products for the primary profile
+%% (local-k3s-gcp). Same shape as hld_overview, but with real primitives wired.
+flowchart TB
+    OP["Operator<br/>over private WireGuard mesh"]
+
+    subgraph Git ["Git repository"]
+        KZ["Kustomize base + overlays<br/>+ persona / openclaw.json"]
+    end
+    CI["CI / GitOps reconciler<br/>(kustomize build → server-side apply)"]
+
+    subgraph K3s ["Self-hosted K3s cluster"]
+        direction TB
+        ING["mesh / ingress<br/>(role: ingress namespace)"]
+        subgraph NSa ["namespace: agent-a"]
+            DEP["Deployment replicas:1<br/>Recreate + PDB"]
+            KSA["ServiceAccount<br/>(Workload Identity)"]
+            ESEC["ExternalSecret → K8s Secret"]
+        end
+        subgraph Plat ["namespace: platform"]
+            ESO["External Secrets Operator"]
+            CSS["ClusterSecretStore (gcpsm)"]
+            CRON["restic CronJobs<br/>(backup + restore-drill)"]
+        end
+        ING --> DEP
+        ESO --> CSS
+        ESO -.->|"sync"| ESEC
+        ESEC -.-> DEP
+    end
+
+    subgraph GCP ["GCP services"]
+        GCS["Cloud Storage (GCS)<br/>versioned · state + restic repo"]
+        GSM["Secret Manager (GSM)"]
+        PS["Pub/Sub<br/>(egress-only pull, inbound)"]
+    end
+
+    OP ==>|"webchat over mesh"| ING
+    KZ --> CI --> ING
+    KSA -.->|"Workload Identity"| GCS
+    KSA -.->|"Workload Identity"| PS
+    CSS -.->|"pull (WI)"| GSM
+    DEP -.->|"R/W"| GCS
+    CRON -->|"encrypted snapshots"| GCS
+    DEP -.->|"pull inbound"| PS
+
+    style OP fill:#2980b9,color:#fff,stroke:#1f6fa5
+    style KZ fill:#2c3e50,color:#fff,stroke:#1a252f
+    style CI fill:#2980b9,color:#fff,stroke:#1f6fa5
+    style ING fill:#34495e,color:#fff,stroke:#1a252f
+    style DEP fill:#27ae60,color:#fff,stroke:#1e8449
+    style KSA fill:#7f8c8d,color:#fff,stroke:#606a6b
+    style ESEC fill:#7f8c8d,color:#fff,stroke:#606a6b
+    style ESO fill:#8e44ad,color:#fff,stroke:#713f8f
+    style CSS fill:#8e44ad,color:#fff,stroke:#713f8f
+    style CRON fill:#e67e22,color:#fff,stroke:#ca6510
+    style GCS fill:#16a085,color:#fff,stroke:#0e6655
+    style GSM fill:#8e44ad,color:#fff,stroke:#713f8f
+    style PS fill:#16a085,color:#fff,stroke:#0e6655
